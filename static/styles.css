@@ -107,3 +107,23 @@ body {
     border: 1px solid #ccc;
     border-radius: 5px;
 }
+
+#help-text {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.05);
+    border-top-right-radius: 5px;
+    font-size: 0.9em;
+    color: #666;
+}
+
+#help-text p {
+    margin: 2px 0;
+}
+
+#help-text p:first-child {
+    font-weight: bold;
+    margin-bottom: 5px;
+}

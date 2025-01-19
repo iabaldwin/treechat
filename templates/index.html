@@ -6,7 +6,13 @@
     <link rel="stylesheet" href="{{ url_for('static', path='/styles.css') }}">
 </head>
 <body>
-    <div id="tree-container"></div>
+    <div id="tree-container">
+        <div id="help-text">
+            <p>Navigation:</p>
+            <p>↑↓ Move through conversation history</p>
+            <p>←→ Move between alternate responses</p>
+        </div>
+    </div>
     <div id="chat-container">
         <input type="password" id="api-key-input" placeholder="Enter your OpenAI API key...">
         <div id="messages"></div>
