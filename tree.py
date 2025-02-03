@@ -98,21 +98,27 @@ async def chat(chat_request: ChatRequest, request: Request):
         client = openai.OpenAI(api_key=api_key)
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=messages
+            messages=messages,
+            n=3,  # Request 3 different completions
+            temperature=0.7  # Increase temperature for more variety
         )
         
-        node_id = chat_tree.add_node(
-            content=response.choices[0].message.content,
-            parent_id=chat_request.parent_id,
-            is_user=False
-        )
+        # Create multiple response nodes
+        responses = []
+        for choice in response.choices:
+            node_id = chat_tree.add_node(
+                content=choice.message.content,
+                parent_id=chat_request.parent_id,
+                is_user=False
+            )
+            responses.append({
+                "id": node_id,
+                "content": choice.message.content,
+                "parent_id": chat_request.parent_id,
+                "is_user": False
+            })
         
-        return {
-            "id": node_id,
-            "content": response.choices[0].message.content,
-            "parent_id": chat_request.parent_id,
-            "is_user": False
-        }
+        return responses
 
 @app.get("/tree")
 async def get_tree():

@@ -40,23 +40,18 @@ function processTreeData(nodes, rootId) {
         const node = nodes[nodeId];
         if (!node) return null;
 
-        // Find all AI response children
+        // Find all AI responses for each user message
         const childrenIds = Object.values(nodes)
-            .filter(n => {
-                if (n.parent_id === nodeId && n.is_user) {
-                    return Object.values(nodes).some(ai => ai.parent_id === n.id && !ai.is_user);
-                }
-                return false;
-            })
-            .map(n => {
-                // Find the AI response that follows this user message
-                return Object.values(nodes).find(ai => ai.parent_id === n.id && !ai.is_user)?.id;
-            })
-            .filter(id => id != null);
+            .filter(n => n.parent_id === nodeId && n.is_user)
+            .flatMap(userNode =>
+                Object.values(nodes)
+                    .filter(ai => ai.parent_id === userNode.id && !ai.is_user)
+                    .map(ai => ai.id)
+            );
 
         // Find the user message that led to this node (if it's an AI node)
-        const userMessage = !node.is_user ? 
-            Object.values(nodes).find(n => n.id === node.parent_id && n.is_user)?.content : 
+        const userMessage = !node.is_user ?
+            Object.values(nodes).find(n => n.id === node.parent_id && n.is_user)?.content :
             null;
 
         return {
@@ -64,7 +59,7 @@ function processTreeData(nodes, rootId) {
             name: node.content.substring(0, 30) + "...",
             children: childrenIds.map(childId => buildHierarchy(childId))
                                .filter(child => child !== null),
-            userMessage: userMessage  // Store the user message that led to this node
+            userMessage: userMessage
         };
     }
 
@@ -73,7 +68,7 @@ function processTreeData(nodes, rootId) {
 
 function updateVisualization(data) {
     svg.selectAll("*").remove();
-    
+
     const root = d3.hierarchy(data);
     const treeLayout = tree(root);
 
@@ -123,7 +118,7 @@ function updateVisualization(data) {
 function updateMessages() {
     const messagesDiv = document.getElementById('messages');
     messagesDiv.innerHTML = '';
-    
+
     if (!treeData || !currentParentId) {
         // If no current node selected, show the root node
         const rootNode = Object.values(treeData || {}).find(node => !node.parent_id);
@@ -144,32 +139,32 @@ function updateMessages() {
     // Build path from current node to root
     const messagePath = [];
     let currentNode = treeData[currentParentId];
-    
+
     // Walk up the tree from current node to root
     while (currentNode) {
         messagePath.unshift(currentNode);  // Add to front of array
         // Get the parent node
         currentNode = currentNode.parent_id ? treeData[currentNode.parent_id] : null;
     }
-    
+
     // Render only the messages in the path
     messagePath.forEach((message) => {
         const messageElement = document.createElement('div');
-        messageElement.className = `message 
-            ${message.id === currentParentId ? 'selected' : ''} 
+        messageElement.className = `message
+            ${message.id === currentParentId ? 'selected' : ''}
             ${message.is_user ? 'user' : 'assistant'}`.trim();
-        
+
         messageElement.textContent = message.content;
-        
+
         messageElement.onclick = () => {
             currentParentId = message.id;
             updateTree();
             updateMessages();
         };
-        
+
         messagesDiv.appendChild(messageElement);
     });
-    
+
     // Scroll to bottom
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
@@ -178,17 +173,17 @@ async function updateTree() {
     const response = await fetch('/tree');
     const data = await response.json();
     treeData = data.nodes;
-    
+
     console.log('Tree data received:', data);
     console.log('Detailed nodes structure:', JSON.stringify(data.nodes, null, 2));
-    
+
     if (data.nodes && Object.keys(data.nodes).length > 0) {
         const entries = Object.entries(data.nodes);
         const rootId = entries[0][0];
         const hierarchicalData = processTreeData(data.nodes, rootId);
-        
+
         console.log('Hierarchical data:', hierarchicalData);
-        
+
         updateVisualization(hierarchicalData);
         updateMessages();
     }
@@ -198,13 +193,13 @@ async function sendPrompt() {
     const promptInput = document.getElementById('prompt-input');
     const apiKey = document.getElementById('api-key-input').value;
     const prompt = promptInput.value;
-    
+
     if (!prompt) return;
     if (!apiKey) {
         alert('Please enter your OpenAI API key');
         return;
     }
-    
+
     // Add user's message to the tree first
     const userResponse = await fetch('/chat', {
         method: 'POST',
@@ -218,11 +213,11 @@ async function sendPrompt() {
             is_user: true
         })
     });
-    
+
     const userData = await userResponse.json();
-    currentParentId = userData.id;  // Set the user message as parent for AI response
-    
-    // Get AI's response
+    const userMessageId = userData.id;  // Store user message ID
+
+    // Get AI's responses
     const aiResponse = await fetch('/chat', {
         method: 'POST',
         headers: {
@@ -231,16 +226,16 @@ async function sendPrompt() {
         },
         body: JSON.stringify({
             prompt: prompt,
-            parent_id: currentParentId,
+            parent_id: userMessageId,  // Use user message as parent
             is_user: false
         })
     });
-    
-    const aiData = await aiResponse.json();
-    if (aiData.id) {
-        currentParentId = aiData.id;
+
+    const aiResponses = await aiResponse.json();
+    if (Array.isArray(aiResponses) && aiResponses.length > 0) {
+        currentParentId = aiResponses[0].id;  // Select first response by default
     }
-    
+
     updateTree();
     promptInput.value = '';
 }
@@ -252,27 +247,27 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
         sendPrompt();
     } else if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.shiftKey) {
         event.preventDefault();
-        
+
         console.log('Arrow key pressed:', event.key);
         console.log('Current parent ID:', currentParentId);
         console.log('Full tree data:', treeData);
-        
+
         const currentNode = treeData[currentParentId];
         if (!currentNode) {
             console.log('No current node found!');
             return;
         }
-        
+
         console.log('Current node:', {
             id: currentNode.id,
             content: currentNode.content.substring(0, 30),
             parent_id: currentNode.parent_id,
             is_user: currentNode.is_user
         });
-        
+
         if (event.key === 'ArrowUp') {
             console.log('Looking for previous AI node from:', currentNode.id);
-            
+
             // Keep going up until we find an AI message or hit the root
             let searchNode = currentNode;
             while (searchNode.parent_id) {
@@ -282,7 +277,7 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
                     content: parentNode.content.substring(0, 30),
                     is_user: parentNode.is_user
                 });
-                
+
                 if (!parentNode.is_user) {
                     console.log('Found previous AI node');
                     currentParentId = parentNode.id;
@@ -294,7 +289,7 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
             }
         } else {
             console.log('Looking for next AI node from:', currentNode.id);
-            
+
             // First find the user message that follows this AI message
             const userChild = Object.values(treeData)
                 .find(node => node.parent_id === currentNode.id && node.is_user);
@@ -303,7 +298,7 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
                 content: userChild.content.substring(0, 30),
                 is_user: userChild.is_user
             } : 'none');
-            
+
             if (userChild) {
                 // Then find the AI message that follows that user message
                 const aiChild = Object.values(treeData)
@@ -313,7 +308,7 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
                     content: aiChild.content.substring(0, 30),
                     is_user: aiChild.is_user
                 } : 'none');
-                
+
                 if (aiChild) {
                     console.log('Moving down to next AI node');
                     currentParentId = aiChild.id;
@@ -328,41 +323,25 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
         }
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault();
-        
-        console.log('Arrow key pressed:', event.key);
-        
-        const currentNode = treeData[currentParentId];
-        if (!currentNode || !currentNode.parent_id) return;
-        
-        // Get all AI siblings (including current node)
-        const parentNode = treeData[currentNode.parent_id];
-        if (!parentNode) return;
 
-        // First find the user message that led to this AI message
+        console.log('Arrow key pressed:', event.key);
+
+        const currentNode = treeData[currentParentId];
+        if (!currentNode) return;
+
+        // Find the user message that led to this AI message
         const userParent = Object.values(treeData)
-            .find(n => n.children && n.children.includes(currentNode.id) && n.is_user);
-        
+            .find(n => n.id === currentNode.parent_id && n.is_user);
+
         if (!userParent) return;
-        
-        // Then find the AI parent of that user message
-        const aiParent = Object.values(treeData)
-            .find(n => n.children && n.children.includes(userParent.id) && !n.is_user);
-        
-        if (!aiParent) return;
-        
-        // Get all user messages that are children of this AI parent
-        const userSiblings = Object.values(treeData)
-            .filter(n => n.parent_id === aiParent.id && n.is_user);
-        
-        // Get the AI responses for each user message
-        const aiSiblings = userSiblings
-            .map(user => Object.values(treeData)
-                .find(n => n.parent_id === user.id && !n.is_user))
-            .filter(n => n !== null);
-        
+
+        // Get all AI siblings (responses to the same user message)
+        const aiSiblings = Object.values(treeData)
+            .filter(n => n.parent_id === userParent.id && !n.is_user);
+
         // Find current position in siblings
         const currentIndex = aiSiblings.findIndex(n => n.id === currentParentId);
-        
+
         if (event.key === 'ArrowLeft' && currentIndex > 0) {
             currentParentId = aiSiblings[currentIndex - 1].id;
             updateTree();
@@ -378,7 +357,7 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
 async function resetTree() {
     try {
         const apiKey = document.getElementById('api-key-input').value;
-        await fetch('/reset', { 
+        await fetch('/reset', {
             method: 'POST',
             headers: {
                 'X-API-Key': apiKey
