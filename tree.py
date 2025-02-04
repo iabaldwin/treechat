@@ -84,41 +84,40 @@ async def chat(chat_request: ChatRequest, request: Request):
         # Build conversation history
         messages = []
         current_id = chat_request.parent_id
-        # Walk up the tree to get context
         while current_id and current_id in chat_tree.nodes:
             node = chat_tree.nodes[current_id]
             role = "user" if node.is_user else "assistant"
             messages.insert(0, {"role": role, "content": node.content})
             current_id = node.parent_id
             
-        # Add the current message
         messages.append({"role": "user", "content": chat_request.prompt})
         
-        # Initialize OpenAI client with API key from request
         client = openai.OpenAI(api_key=api_key)
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=messages,
-            n=3,  # Request 3 different completions
-            temperature=0.7  # Increase temperature for more variety
+            n=3,
+            temperature=0.7
         )
         
-        # Create multiple response nodes
-        responses = []
+        # Track unique responses
+        unique_responses = {}
         for choice in response.choices:
-            node_id = chat_tree.add_node(
-                content=choice.message.content,
-                parent_id=chat_request.parent_id,
-                is_user=False
-            )
-            responses.append({
-                "id": node_id,
-                "content": choice.message.content,
-                "parent_id": chat_request.parent_id,
-                "is_user": False
-            })
+            content = choice.message.content
+            if content not in unique_responses:
+                node_id = chat_tree.add_node(
+                    content=content,
+                    parent_id=chat_request.parent_id,
+                    is_user=False
+                )
+                unique_responses[content] = {
+                    "id": node_id,
+                    "content": content,
+                    "parent_id": chat_request.parent_id,
+                    "is_user": False
+                }
         
-        return responses
+        return list(unique_responses.values())
 
 @app.get("/tree")
 async def get_tree():
