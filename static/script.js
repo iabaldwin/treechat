@@ -327,29 +327,59 @@ document.getElementById('prompt-input').addEventListener('keydown', function(eve
         console.log('Arrow key pressed:', event.key);
 
         const currentNode = treeData[currentParentId];
-        if (!currentNode) return;
+        if (!currentNode) {
+            console.log('Current node not found.');
+            return;
+        }
 
-        // Find the user message that led to this AI message
-        const userParent = Object.values(treeData)
-            .find(n => n.id === currentNode.parent_id && n.is_user);
+        // Get the parent node of the current node
+        const parentNode = treeData[currentNode.parent_id];
+        if (!parentNode) {
+            console.log('Parent node not found.');
+            return;
+        }
 
-        if (!userParent) return;
+        // Get the grandparent node of the current node
+        const grandParentNode = treeData[parentNode.parent_id];
+        if (!grandParentNode) {
+            console.log('Grandparent node not found.');
+            return;
+        }
 
-        // Get all AI siblings (responses to the same user message)
-        const aiSiblings = Object.values(treeData)
-            .filter(n => n.parent_id === userParent.id && !n.is_user);
+        // Collect all AI responses that are children of the grandparent node
+        const aiChildren = [];
+        grandParentNode.children.forEach(childId => {
+            const childNode = treeData[childId];
+            if (childNode.is_user) {
+                // If the child is a user message, get its AI responses
+                childNode.children.forEach(grandChildId => {
+                    const grandChildNode = treeData[grandChildId];
+                    if (!grandChildNode.is_user) {
+                        aiChildren.push(grandChildNode);
+                    }
+                });
+            }
+        });
 
-        // Find current position in siblings
-        const currentIndex = aiSiblings.findIndex(n => n.id === currentParentId);
+        // Log the order of AI children
+        console.log('AI Children:', aiChildren.map(n => n.id));
+
+        // Find current position in the list of AI children
+        const currentIndex = aiChildren.findIndex(n => n.id === currentParentId);
+        console.log('Current Index:', currentIndex);
 
         if (event.key === 'ArrowLeft' && currentIndex > 0) {
-            currentParentId = aiSiblings[currentIndex - 1].id;
+            currentParentId = aiChildren[currentIndex - 1].id;
+            console.log('Navigating to:', currentParentId);
             updateTree();
             updateMessages();
-        } else if (event.key === 'ArrowRight' && currentIndex < aiSiblings.length - 1) {
-            currentParentId = aiSiblings[currentIndex + 1].id;
+        } else if (event.key === 'ArrowRight' && currentIndex < aiChildren.length - 1) {
+            currentParentId = aiChildren[currentIndex + 1].id;
+            console.log('Navigating to:', currentParentId);
             updateTree();
             updateMessages();
+        } else {
+            console.log('No navigation possible.');
         }
     }
 });
